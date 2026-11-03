@@ -45,7 +45,7 @@ if (!fs.existsSync(__dirname + '/db')) {
 }
 
 // data storage
-var db = require('diskdb');
+var db = require('./lib/storage');
 db.connect(__dirname + '/db', ['label', 'printer', 'jobs']);
 
 // websocket
