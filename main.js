@@ -368,7 +368,7 @@ function executeRequest(job, callback) {
 rest.post('/rest/printer', function(req, res) {
   var address = req.body.address;
 
-  if (!address || address == "" || address.split(":").length != 2 || parseInt(address.split(":")[1]) == NaN) {
+  if (!address || address == "" || address.split(":").length != 2 || isNaN(parseInt(address.split(":")[1]))) {
     return res.status(400).send('address is not valid');
   }
   var response;
