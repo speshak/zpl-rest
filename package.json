@@ -17,15 +17,20 @@
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"
   },
+  "engines": {
+    "node": ">=18"
+  },
+  "overrides": {
+    "merge": "^2.1.1"
+  },
   "dependencies": {
-    "cors": "^2.8.5",
+    "cors": "^2.8.6",
     "diskdb": "^0.1.17",
-    "ejs": "^3.1.10",
-    "express": "^4.22.1",
-    "express-session": "^1.17.0",
-    "mustache": "^3.1.0",
-    "request": "^2.88.0",
-    "serve-favicon": "^2.5.0",
-    "websocket": "^1.0.30"
+    "ejs": "^7.0.2",
+    "express": "^5.3.0",
+    "express-session": "^1.19.0",
+    "mustache": "^4.2.0",
+    "serve-favicon": "^2.5.1",
+    "ws": "^8.22.1"
   }
 }
