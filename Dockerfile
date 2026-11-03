@@ -1,9 +1,10 @@
-FROM node:16-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
 COPY . .
 
-RUN npm install
-
-CMD npm start
+CMD ["npm", "start"]
