@@ -1,6 +1,5 @@
 var fs = require('fs');
 var path = require('path');
-var request = require('request');
 
 // config stuff
 const ConfigHandler = require('./lib/config.js');
@@ -50,7 +49,7 @@ var db = require('diskdb');
 db.connect(__dirname + '/db', ['label', 'printer', 'jobs']);
 
 // websocket
-var WebSocketServer = require('websocket').server;
+var WebSocketServer = require('ws').WebSocketServer;
 var http = require('http');
 
 // socket for sending data to the printer
@@ -65,7 +64,7 @@ rest.get('/', function(req, res) {
 });
 
 // set timespan for index
-rest.post('/rest/timespan/(:timespan)', function(req, res) {
+rest.post('/rest/timespan/:timespan', function(req, res) {
   if (!req.params.timespan) {
     return res.status(400).send('no timespan was given');
   }
@@ -185,27 +184,32 @@ rest.get('/rest/preview', function(req, res) {
 
 });
 
-function getPreview(res,req,printer,label,zpl){
-  var options = {
-    encoding: null,
-    formData: {
-      file: zpl
-    },
-    url: 'http://api.labelary.com/v1/printers/'+printer.density+'/labels/'+label.width+'x'+label.height+'/0/' // adjust print density (8dpmm), label width (4 inches), label height (6 inches), and label index (0) as necessary
-  };
+async function getPreview(res, req, printer, label, zpl) {
+  const url = 'http://api.labelary.com/v1/printers/' + printer.density + '/labels/' + label.width + 'x' + label.height + '/0/'; // adjust print density (8dpmm), label width (4 inches), label height (6 inches), and label index (0) as necessary
 
-  request.post(options, function(err, resp, body) {
-    if (err) {
-      console.log((new Date()), err);
-      res.json(err);
-    }else{
-      res.json({"img":new Buffer(body).toString('base64')});
+  try {
+    const formData = new FormData();
+    formData.append('file', zpl);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error('labelary request failed with status ' + response.status);
     }
-  });
+
+    const buf = Buffer.from(await response.arrayBuffer());
+    res.json({ "img": buf.toString('base64') });
+  } catch (err) {
+    console.log((new Date()), err);
+    res.status(500).json({ "error": err.message ? err.message : err });
+  }
 }
 
 // actuall reprint
-rest.post('/rest/reprint/(:id)', function(req, res) {
+rest.post('/rest/reprint/:id', function(req, res) {
   var response = {};
   if (!req.params.id) {
     return res.status(400).send('no job id was given');
@@ -409,7 +413,7 @@ rest.post('/rest/label', function(req, res) {
 });
 
 // delete printer
-rest.delete('/rest/printer/(:id)', function(req, res) {
+rest.delete('/rest/printer/:id', function(req, res) {
   if (!req.params.id) {
     return res.status(400).send('no id was given');
   }
@@ -425,7 +429,7 @@ rest.delete('/rest/printer/(:id)', function(req, res) {
 });
 
 // delete label
-rest.delete('/rest/label/(:id)', function(req, res) {
+rest.delete('/rest/label/:id', function(req, res) {
   if (!req.params.id) {
     return res.status(400).send('no id was given');
   }
@@ -462,29 +466,30 @@ server.listen(config.websocket_port, function() {
 });
 
 // create the server
-wsServer = new WebSocketServer({
-  httpServer: server
-});
+var wsServer = new WebSocketServer({ server: server });
 
-var websockt_clients = [];
+var websocket_clients = [];
 
 // WebSocket server
-wsServer.on('request', function(request) {
-  console.log((new Date()) + ' Connection from origin ' + request.origin + '.');
-  var connection = request.accept(null, request.origin);
-  var index = websockt_clients.push(connection) - 1;
+wsServer.on('connection', function(socket, req) {
+  console.log((new Date()) + ' Connection from origin ' + req.headers.origin + '.');
+  var index = websocket_clients.push(socket) - 1;
 
   console.log((new Date()) + ' Connection accepted.');
-  connection.on('message', function(message) {});
 
-  connection.on('close', function(connection) {
-    console.log((new Date()) + " Peer " + connection.remoteAddress + " disconnected.");
-    websockt_clients.splice(index, 1);
+  socket.on('message', function(message) {});
+
+  socket.on('close', function() {
+    console.log((new Date()) + " Peer " + (socket._socket ? socket._socket.remoteAddress : 'unknown') + " disconnected.");
+    delete websocket_clients[index];
   });
 });
 
 function broadcastMsg(json) {
-  for (var i = 0; i < websockt_clients.length; i++) {
-    websockt_clients[i].sendUTF(JSON.stringify(json));
-  }
+  var data = JSON.stringify(json);
+  websocket_clients.forEach(function(client) {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      client.send(data);
+    }
+  });
 }
