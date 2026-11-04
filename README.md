@@ -12,6 +12,7 @@ Zebra printers accept raw ZPL on TCP port 9100, but sending it from an ERP, a wa
 
 - REST API to manage printers and ZPL label templates
 - Placeholders (`${varname}`) and [Mustache](https://mustache.github.io/) syntax inside ZPL
+- Print raw ZPL directly, without a stored label template
 - Label preview rendered via the [Labelary](http://labelary.com/service.html) API
 - Test print directly from the web UI
 - Job history with reprint, optionally on a different printer or with edited ZPL
@@ -82,6 +83,27 @@ curl -X POST http://localhost:8000/rest/print \
 
 zpl-rest replaces `${sometext}` with `hello world` and sends the finished ZPL to the printer. The `job_id` is optional. It is stored with the job and shown in the dashboard failure list and on the reprint page.
 
+### 4. Print raw ZPL
+
+If you already have complete ZPL, you can print it without creating a label template first. Send the ZPL as the plain body of the request — no JSON wrapper needed. The job history always records an auto-generated id for reprinting.
+
+```bash
+curl -X POST http://localhost:8000/rest/printer/<printer id>/printZpl \
+  -H "Content-Type: text/plain" \
+  -d '^XA^A0N,36,36^FO236,71^FDhello world^FS^XZ'
+```
+
+If you want to tag the job with your own id (e.g. an order number shown in the failure list and on the reprint page), send it as JSON instead:
+
+```bash
+curl -X POST http://localhost:8000/rest/printer/<printer id>/printZpl \
+  -H "Content-Type: application/json" \
+  -d '{
+        "job_id": "order-4712",
+        "zpl": "^XA^A0N,36,36^FO236,71^FDhello world^FS^XZ"
+      }'
+```
+
 ## Web UI
 
 Reprint page with the history of all print jobs:
@@ -102,6 +124,7 @@ Label editor with live preview:
 | GET | `/rest/preview` | `?printer=<id>&label=<id>(&zpl=...)` | Label preview as base64 image |
 | POST | `/rest/preview` | `{printer, label (, zpl)}` | Label preview as base64 image |
 | POST | `/rest/print` | `{printer, label, data (, job_id)}` | Print a label |
+| POST | `/rest/printer/:printerid/printZpl` | body: raw ZPL as text<br>or `{zpl (, job_id)}` as JSON | Print raw ZPL without a label template |
 | POST | `/rest/reprint/:jobid` | `({printer, zpl})` | Reprint a job, optionally with another printer or changed ZPL |
 | POST | `/rest/printer` | add: `{name, address, density}`<br>update: `{_id, name, address, density}` | Add or update a printer |
 | POST | `/rest/label` | add: `{name, zpl, width, height}`<br>update: `{_id, name, zpl, width, height}` | Add or update a label |

@@ -327,6 +327,58 @@ rest.post('/rest/print', function(req, res) {
   });
 });
 
+// print raw zpl without a label template.
+// the zpl can be sent as the plain text body directly (e.g. Content-Type: text/plain),
+// or wrapped as JSON {zpl, job_id} when a job_id for the history is wanted.
+rest.post('/rest/printer/:id/printZpl', express.text({ type: ['text/*', 'application/octet-stream'] }), function(req, res) {
+  var zpl;
+  if (req.is('application/json')) {
+    zpl = req.body ? req.body.zpl : null;
+  } else {
+    zpl = typeof req.body === 'string' ? req.body : null;
+  }
+  if (!zpl) {
+    return res.status(400).send('no zpl was given');
+  }
+
+  var printer = db.printer.findOne({
+    _id: req.params.id
+  });
+  if (!printer) {
+    return res.status(400).send('given printer id was not valid');
+  }
+
+  var job = {};
+  job.date = new Date();
+  job.printer_id = printer._id;
+  job.printer_name = printer.name;
+  job.printer_address = printer.address;
+  job.printer_ip = printer.address.split(':')[0];
+  job.printer_port = parseInt(printer.address.split(':')[1]);
+  job.label_id = null;
+  job.label_name = null;
+  job.label_zpl = null;
+  job.data = null;
+  job.job_id = req.is('application/json') && typeof req.body.job_id !== 'undefined' ? req.body.job_id : null;
+
+  job.zpl = zpl;
+  job.mustache = false;
+
+  console.log((new Date()) + ' zpl print job received', job);
+
+  executeRequest(job, function(ret) {
+    job = ret;
+    db.jobs.save(job);
+
+    var broadcast = {};
+    broadcast.source = "job";
+    broadcast.data = job;
+    broadcastMsg(broadcast);
+
+    res.json(job)
+  });
+});
+
 function executeRequest(job, callback) {
   var client = new Net.Socket();
 
