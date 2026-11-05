@@ -93,6 +93,69 @@ curl -X POST http://localhost:8000/rest/printer/<printer id>/printZpl \
   -d '^XA^A0N,36,36^FO236,71^FDhello world^FS^XZ'
 ```
 
+### 5. QR codes and barcodes
+
+QR codes and one-dimensional barcodes are drawn by the printer firmware itself —
+Zebra's ZPL has native commands for both (`^BQ` for QR, `^BC` for Code 128 and
+others, see the [ZPL manual](https://support.zebra.com/)). That means no extra
+support is needed in zpl-rest: put the barcode command in your template and a
+normal `${varname}` placeholder inside its `^FD` field.
+
+QR example template:
+
+```zpl
+^XA
+^CI28
+^FO100,100
+^BQN,2,8,H
+^FDMA,${qr_data}^FS
+^XZ
+```
+
+`^BQN,2,8,H` breaks down as orientation, model 2 (re recommended), magnification
+(1–10 dots per module, controls the physical size) and error correction level
+(H, Q, M or L). The `MA,` prefix of the `^FD` field means all data that follows
+is encoded automatically.
+
+Print it with the data to be encoded as the placeholder value:
+
+```bash
+curl -X POST http://localhost:8000/rest/print \
+  -H "Content-Type: application/json" \
+  -d '{
+        "printer": "<printer id>",
+        "label": "<label id>",
+        "data": { "qr_data": "https://example.com/order/4711" }
+      }'
+```
+
+A Code 128 barcode works the same way:
+
+```zpl
+^FO100,100
+^BY2
+^BCN,100,Y,N,N
+^FD${barcode_data}^FS
+```
+
+(This uses `^BY2` for a module width of 2 dots, `^BCN,100,...` for a 100-dot
+tall non-rotated barcode, and prints its content as readable text — see the
+ZPL manual for details and other barcode types like Code 39 `^B3`, EAN-13
+`^BE`, PDF417 `^B7`, DataMatrix `^BX` or Aztec `^BU`.)
+
+Two things to keep in mind with placeholders inside `^FD`:
+
+- If your template uses mustache syntax, note that `{{varname}}` HTML-escapes
+  the value — a URL containing `&` would be corrupted to `&amp;`. Use the
+  triple-stache `{{{varname}}}` for barcode and QR data instead (plain
+  `${varname}` placeholders don't escape anything).
+- A literal `^` or `~` inside `^FD` is interpreted as a ZPL control character
+  and corrupts the label. For data you don't fully control, you can hex-encode
+  it with `^FH`: add `^FH` above `^FD` and write the data as two-digit hex
+  (with UTF-8 enabled via `^CI28`), e.g. `^FH^FDMA,68656C6C6F^FS` encodes
+  `hello`. Then use a hex-encoded placeholder value, e.g. send Node's
+  `Buffer.from(value).toString('hex')` as the data.
+
 If you want to tag the job with your own id (e.g. an order number shown in the failure list and on the reprint page), send it as JSON instead:
 
 ```bash
